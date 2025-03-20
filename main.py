@@ -141,15 +141,15 @@ class StudentDataAnalysis:
         """
         # Standardize the data
         scaler = StandardScaler()
-        df_scaled = self.df[[ 'Q1', 'Q3', 'Q5']]
-        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=[ 'Q1', 'Q3', 'Q5'])
+        df_scaled = self.df[[ 'Q1','Q2', 'Q3','Q4', 'Q5']]
+        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=[ 'Q1','Q2', 'Q3','Q4', 'Q5'])
 
         # Apply PCA
         pca = PCA(n_components=2)
         pca_components = pca.fit_transform(df_scaled)
 
         # Create a DataFrame for PCA components
-        pca_df = pd.DataFrame(data=pca_components, columns=['PC1', 'PC2'])
+        pca_df = pd.DataFrame(pca_components, columns=['PC1', 'PC2'])
         pca_df['Programme'] = self.df['Programme']
 
         # Visualize PCA result
@@ -165,8 +165,8 @@ class StudentDataAnalysis:
         """
         # Standardize the data
         scaler = StandardScaler()
-        df_scaled = self.df[[ 'Q3', 'Q4', 'Q5']]
-        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=[ 'Q3', 'Q4', 'Q5'])
+        df_scaled = self.df[[ 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']]
+        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=['Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
 
         # Apply PCA
         pca = PCA(n_components=3)  # We want 3 principal components
