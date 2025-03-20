@@ -140,23 +140,38 @@ class StudentDataAnalysis:
         """
         # Standardize the data
         scaler = StandardScaler()
-        df_scaled = self.df[['Q1', 'Q2', 'Q3', 'Q4', 'Q5']]
-        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=['Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
+        df_scaled = self.df[['Gender','Grade','Q1', 'Q2', 'Q3', 'Q4', 'Q5']]
+        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=['Gender','Grade','Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
 
         # Apply PCA
-        pca = PCA(n_components=2)
+        pca = PCA(n_components=3)
         pca_components = pca.fit_transform(df_scaled)
 
         # Create a DataFrame for PCA components
-        pca_df = pd.DataFrame(data=pca_components, columns=['PC1', 'PC2'])
+        pca_df = pd.DataFrame(data=pca_components, columns=['PC1', 'PC2','PC3'])
         pca_df['Programme'] = self.df['Programme']
 
-        # Visualize PCA result
-        plt.figure(figsize=(8, 6))
-        sns.scatterplot(data=pca_df, x='PC1', y='PC2', hue='Programme', palette='Set1')
-        plt.title('PCA of Exam Marks (Q1-Q5)')
-        plt.xlabel('Principal Component 1')
-        plt.ylabel('Principal Component 2')
+        # Visualize PCA result in 3D
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Scatter plot for the first 3 principal components
+        scatter = ax.scatter(
+            pca_df['PC1'], pca_df['PC2'], pca_df['PC3'],
+            c=pca_df['Programme'].astype('category').cat.codes, cmap='Set1'
+        )
+
+        # Add labels
+        ax.set_xlabel('Principal Component 1')
+        ax.set_ylabel('Principal Component 2')
+        ax.set_zlabel('Principal Component 3')
+        ax.set_title('3D PCA of Exam Marks (Q1-Q5)')
+
+        # Add a legend based on Programme
+        handles, labels = scatter.legend_elements()
+        ax.legend(handles, labels, title="Programme")
+
+        # Show the plot
         plt.show()
 
     def clustering_analysis(self):
