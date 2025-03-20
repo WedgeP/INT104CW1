@@ -134,21 +134,23 @@ class StudentDataAnalysis:
         plt.tight_layout()
         plt.show()
 
+    from mpl_toolkits.mplot3d import Axes3D
+
     def pca_analysis(self):
         """
         Perform PCA (Principal Component Analysis) on the exam marks data and visualize the result.
         """
         # Standardize the data
         scaler = StandardScaler()
-        df_scaled = self.df[['Gender','Grade','Q1', 'Q2', 'Q3', 'Q4', 'Q5']]
-        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=['Gender','Grade','Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
+        df_scaled = self.df[['Grade','Q1', 'Q2', 'Q3', 'Q4', 'Q5']]
+        df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), columns=['Grade','Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
 
         # Apply PCA
-        pca = PCA(n_components=3)
+        pca = PCA(n_components=3)  # We want 3 principal components
         pca_components = pca.fit_transform(df_scaled)
 
         # Create a DataFrame for PCA components
-        pca_df = pd.DataFrame(data=pca_components, columns=['PC1', 'PC2','PC3'])
+        pca_df = pd.DataFrame(data=pca_components, columns=['PC1', 'PC2', 'PC3'])
         pca_df['Programme'] = self.df['Programme']
 
         # Visualize PCA result in 3D
