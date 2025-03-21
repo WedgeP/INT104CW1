@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 
 
 # Apply K-means clustering (k=4 since we have 4 programmes)
@@ -15,32 +15,32 @@ def apply_kmeans(X_scaled, y, pca=None, X_pca=None):
     # Find optimal number of clusters using the Elbow method
     inertia = []
     silhouette_scores = []
-    range_n_clusters = range(2, 10)
-
-    for n_clusters in range_n_clusters:
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        kmeans.fit(X_scaled)
-        inertia.append(kmeans.inertia_)
-        silhouette_scores.append(silhouette_score(X_scaled, kmeans.labels_))
-
-    # Plot the Elbow method
-    plt.figure(figsize=(12, 5))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(range_n_clusters, inertia, marker='o')
-    plt.title('Elbow Method')
-    plt.xlabel('Number of clusters')
-    plt.ylabel('Inertia')
-    plt.grid(True)
-
-    plt.subplot(1, 2, 2)
-    plt.plot(range_n_clusters, silhouette_scores, marker='o')
-    plt.title('Silhouette Score Method')
-    plt.xlabel('Number of clusters')
-    plt.ylabel('Silhouette Score')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    # range_n_clusters = range(2, 10)
+    #
+    # for n_clusters in range_n_clusters:
+    #     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    #     kmeans.fit(X_scaled)
+    #     inertia.append(kmeans.inertia_)
+    #     silhouette_scores.append(silhouette_score(X_scaled, kmeans.labels_))
+    #
+    # # Plot the Elbow method
+    # plt.figure(figsize=(12, 5))
+    #
+    # plt.subplot(1, 2, 1)
+    # plt.plot(range_n_clusters, inertia, marker='o')
+    # plt.title('Elbow Method')
+    # plt.xlabel('Number of clusters')
+    # plt.ylabel('Inertia')
+    # plt.grid(True)
+    #
+    # plt.subplot(1, 2, 2)
+    # plt.plot(range_n_clusters, silhouette_scores, marker='o')
+    # plt.title('Silhouette Score Method')
+    # plt.xlabel('Number of clusters')
+    # plt.ylabel('Silhouette Score')
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.show()
 
     # Perform K-means with k=4 (matching number of programmes)
     kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
@@ -112,19 +112,22 @@ plt.cla()  # 清除当前图形
 df = pd.read_csv("./student_data.csv")
 df = df.drop(columns=["Index"])
 
-df['Total']=df['Q1']+df['Q2']+df['Q3']+df['Q4']+df['Q5']
-# 计算题目占总分比例
-df['Q1'] = df['Q1'] / 8   # Q1满分8分
-df['Q2'] = df['Q2'] / 8
-df['Q3'] = df['Q3'] / 14   # Q3满分14分
-df['Q4'] = df['Q4'] / 10
-df['Q5'] = df['Q5'] / 6
-df['Total'] = df['Total'] / df['Total'].max()  # 归一化
+# df['Total']=df['Q1']+df['Q2']+df['Q3']+df['Q4']+df['Q5']
+# # 计算题目占总分比例
+# df['Q1'] = df['Q1'] / 8   # Q1满分8分
+# df['Q2'] = df['Q2'] / 8
+# df['Q3'] = df['Q3'] / 14   # Q3满分14分
+# df['Q4'] = df['Q4'] / 10
+# df['Q5'] = df['Q5'] / 6
+# df['Total'] = df['Total'] / df['Total'].max()  # 归一化
 
 
 # 分离特征和目标变量
 X = df.drop(columns=["Programme"])
 y = df["Programme"]
+
+poly = PolynomialFeatures(degree=10, interaction_only=False, include_bias=False)
+X_poly = poly.fit_transform(X)
 
 # 创建PCA + 分类器的管道
 pipeline = Pipeline([
@@ -135,7 +138,7 @@ pipeline = Pipeline([
 
 # 定义参数网格
 param_grid = {
-    'pca__n_components': [1, 2, 3, 4, 5, 7, 8],
+    'pca__n_components': range(1, 40),
     'classifier__n_estimators': [100, 200, 300],
     'classifier__max_depth': [None, 5, 10, 15]
 }
