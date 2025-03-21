@@ -107,13 +107,19 @@ def apply_kmeans(X_scaled, y, pca=None, X_pca=None):
     plt.show()
 
     return kmeans, cluster_labels, programme_mapping
-
+plt.cla()  # 清除当前图形
 # 加载数据
 df = pd.read_csv("./student_data.csv")
 df = df.drop(columns=["Index"])
+
+df['Total']=df['Q1']+df['Q2']+df['Q3']+df['Q4']+df['Q5']
 # 计算题目占总分比例
-df['Q1_percent'] = df['Q1'] / 8 * 100  # Q1满分8分
-df['Q3_percent'] = df['Q3'] / 14 * 100  # Q3满分14分
+df['Q1'] = df['Q1'] / 8   # Q1满分8分
+df['Q2'] = df['Q2'] / 8
+df['Q3'] = df['Q3'] / 14   # Q3满分14分
+df['Q4'] = df['Q4'] / 10
+df['Q5'] = df['Q5'] / 6
+df['Total'] = df['Total'] / df['Total'].max()  # 归一化
 
 
 # 分离特征和目标变量
@@ -129,7 +135,7 @@ pipeline = Pipeline([
 
 # 定义参数网格
 param_grid = {
-    'pca__n_components': [1, 2, 3, 4, 5, 6, 7],
+    'pca__n_components': [1, 2, 3, 4, 5, 7, 8],
     'classifier__n_estimators': [100, 200, 300],
     'classifier__max_depth': [None, 5, 10, 15]
 }
@@ -162,3 +168,4 @@ print(f"Silhouette Score: {silhouette_score(X_scaled, cluster_labels):.4f}")
 print("\nCluster to Programme Mapping:")
 for cluster, programme in programme_mapping.items():
     print(f"Cluster {cluster} → Programme {programme}")
+plt.close()  # 关闭当前图形窗口
