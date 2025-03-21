@@ -9,21 +9,21 @@ from sklearn.metrics import silhouette_score
 df = pd.read_csv("./student_data.csv")
 df = df.drop(columns=["Index"])
 
-# df['Total'] = df['Q1'] + df['Q2'] + df['Q3'] + df['Q4'] + df['Q5']
-# # 计算题目占总分比例
-# df['Q1'] = df['Q1'] / 8   # Q1满分8分
-# df['Q2'] = df['Q2'] / 8
-# df['Q3'] = df['Q3'] / 14   # Q3满分14分
-# df['Q4'] = df['Q4'] / 10
-# df['Q5'] = df['Q5'] / 6
-# df['Total'] = df['Total'] / df['Total'].max()  # 归一化
+df['Total'] = df['Q1'] + df['Q2'] + df['Q3'] + df['Q4'] + df['Q5']
+# 计算题目占总分比例
+df['Q1'] = df['Q1'] / 8   # Q1满分8分
+df['Q2'] = df['Q2'] / 8
+df['Q3'] = df['Q3'] / 14   # Q3满分14分
+df['Q4'] = df['Q4'] / 10
+df['Q5'] = df['Q5'] / 6
+df['Total'] = df['Total'] #/ df['Total'].max()  # 归一化
 
 # 分离特征和目标变量
 X = df.drop(columns=["Programme"])
 y = df["Programme"]
 
 # 生成高阶特征
-poly = PolynomialFeatures(degree=10, interaction_only=False, include_bias=False)
+poly = PolynomialFeatures(degree=20, interaction_only=False, include_bias=True)
 X_poly = poly.fit_transform(X)
 
 # 数据标准化
@@ -39,7 +39,7 @@ plt.figure(figsize=(10, 8))
 unique_programmes = y.unique()
 for programme in unique_programmes:
     indices = y == programme
-    plt.scatter(X_pca[indices, 0], X_pca[indices, 1], label=f'Programme {programme}', alpha=0.7)
+    plt.scatter(X_pca[indices, 0], X_pca[indices, 1], label=f'Programme {programme}', alpha=0.5)
 
 plt.title('Original Classification Results')
 plt.xlabel('Principal Component 1')
