@@ -37,7 +37,6 @@ def generate_statistical_features(X):
 
 # 读取数据
 df = pd.read_csv("./student_data.csv")
-df = df.drop(columns=["Index"])
 
 # 分离特征和目标变量
 X = df.drop(columns=["Programme"])
