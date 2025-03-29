@@ -1,14 +1,26 @@
+# 导入必要的库
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.metrics import classification_report
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.model_selection import GridSearchCV
+
+# 设置随机种子和中文显示
+np.random.seed(42)
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']
+plt.rcParams['axes.unicode_minus'] = False
 
 # 按年级划分训练集
 grade_models = {}
 
+# 读取数据
+df = pd.read_csv("./student_data.csv")
 
-# 定义特征工程函数
+
+# 定义高级特征工程函数
 def create_advanced_features(df_input):
     eps = 0.0000001
     # 基础特征
@@ -26,7 +38,7 @@ def create_advanced_features(df_input):
         ['Q1', 'Q2', 'Q3', 'Q4', 'Q5']].min(axis=1)
     X['cv_score'] = X['std_score'] / (X['mean_score'] + eps)  # 变异系数
 
-    # 归一化题目分数（考虑题目满分不同）
+    # 归一化题目分数
     max_scores = [8, 8, 14, 10, 6]  # 每题满分
     for i in range(1, 6):
         X[f'Q{i}_norm'] = df_input[f'Q{i}'] / max_scores[i - 1]
@@ -34,11 +46,9 @@ def create_advanced_features(df_input):
     return X
 
 
-# 读取数据
-df = pd.read_csv("./student_data.csv")
-
 # 按年级分别训练模型
 for grade in df['Grade'].unique():
+    print(f"\n开始训练年级 {grade} 的模型")
     grade_df = df[df['Grade'] == grade]
 
     X_grade = create_advanced_features(grade_df)
@@ -56,31 +66,33 @@ for grade in df['Grade'].unique():
     X_grade = X_grade[mask]
     y_grade = y_grade[mask]
 
+    # 交叉验证
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
     # 创建模型
     rf = RandomForestClassifier(random_state=42)
 
-    # 简化参数
-    rf_params = {
-        'n_estimators': 100,
-        'max_depth': 20,
-        'min_samples_split': 2
+    # 超参数网格
+    rf_param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20],
+        'min_samples_split': [2, 5]
     }
 
-    # 设置模型参数
-    rf.set_params(**rf_params)
+    # 网格搜索
+    grid_rf = GridSearchCV(rf, rf_param_grid, cv=cv, scoring='accuracy')
+    grid_rf.fit(X_grade, y_grade)
 
-    # 训练模型
-    rf.fit(X_grade, y_grade)
-
-    # 保存模型
+    # 保存最佳模型
     grade_models[grade] = {
-        'model': rf,
+        'model': grid_rf.best_estimator_,
         'features': X_grade.columns,
-        'accuracy': None,
-        'best_params': rf_params
+        'accuracy': grid_rf.best_score_,
+        'best_params': grid_rf.best_params_
     }
 
-    print(f"年级 {grade} 模型训练完成")
+    print(f"年级 {grade} 模型训练完成，最佳准确率: {grid_rf.best_score_:.4f}")
+    print(f"最佳参数: {grid_rf.best_params_}")
 
 
 # 预测函数
@@ -91,10 +103,9 @@ def predict_programme_with_bayes(scores, grade, gender):
     参数:
         scores (list): 学生的各科成绩
         grade (int): 学生所在年级
-        gender (int): 学生性别（1=男，2=女）
-
+        gender (int): 学生性别
     返回:
-        dict: 各个专业的概率分布，例如 {'A': 0.6, 'B': 0.3, 'C': 0.1}
+        dict: 各个专业的概率分布
     """
     # 检查给定年级是否有模型
     if grade not in grade_models:
@@ -147,88 +158,59 @@ def predict_programme_with_bayes(scores, grade, gender):
     return probs_dict
 
 
-# 测试集验证
-def validate_on_test_set(test_file_path):
-    # 导入测试数据
-    test_df = pd.read_csv(test_file_path)
-    print(f"验证数据集样本数量: {len(test_df)}")
+# 测试案例
+test_cases = [
+    {'scores': [4, 0, 0, 0, 2], 'grade': 2, 'gender': 2, 'expected': 'A'},  # 低分A系学生
+    {'scores': [8, 2, 2, 0, 0], 'grade': 2, 'gender': 2, 'expected': 'D'},  # 高分D系学生
+    {'scores': [8, 2, 2, 7, 1], 'grade': 2, 'gender': 2, 'expected': 'A'},  # 中分A系学生
+    {'scores': [8, 6, 14, 10, 3], 'grade': 2, 'gender': 2, 'expected': 'A'},  # A系学生
+    {'scores': [8, 6, 14, 8, 0], 'grade': 2, 'gender': 2, 'expected': 'A'},
+    {'scores': [8, 6, 12, 5, 2], 'grade': 2, 'gender': 2, 'expected': 'C'}
+]
 
-    # 系别映射（如果需要）
-    mapping = {'1': 'A', '2': 'B', '3': 'C', '4': 'D'}
+# 读取测试数据
+test_df = pd.read_csv("./test_data.csv")
 
-    # 检查是否需要转换系别编码
-    if test_df['Programme'].dtype == 'int64' or test_df['Programme'].iloc[0] in ['1', '2', '3', '4']:
-        test_df['Programme'] = test_df['Programme'].astype(str).map(mapping)
+# 系别映射
+mapping = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}  # 可以根据需要修改映射关系
 
-    # 初始化结果
-    results = {
-        'actual': [],
-        'predicted': [],
-        'correct': []
-    }
+# 转换系别编码（如果需要）
+if test_df['Programme'].dtype == 'int64' or test_df['Programme'].iloc[0] in [1, 2, 3, 4]:
+    test_df['Programme'] = test_df['Programme'].map(mapping)
 
-    # 按年级分组进行验证
-    for grade in sorted(test_df['Grade'].unique()):
-        grade_test = test_df[test_df['Grade'] == grade]
-        print(f"\n年级 {grade} 验证样本数: {len(grade_test)}")
+# 提取测试集特征和标签
+X_test = test_df[['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Grade', 'Gender']]
+y_test = test_df['Programme']
 
-        # 如果该年级没有训练模型，则跳过
-        if grade not in grade_models:
-            print(f"⚠️ 年级 {grade} 没有训练好的模型，跳过")
-            continue
+# 按年级分别进行预测
+predictions = []
+probabilities = []
 
-        correct_count = 0
-        total_count = 0
+for _, row in X_test.iterrows():
+    scores = [row['Q1'], row['Q2'], row['Q3'], row['Q4'], row['Q5']]
+    grade = row['Grade']
+    gender = row['Gender']
 
-        for _, student in grade_test.iterrows():
-            scores = [student['Q1'], student['Q2'], student['Q3'], student['Q4'], student['Q5']]
-            gender = student['Gender']
-            actual_programme = student['Programme']
+    # 获取预测概率
+    probs = predict_programme_with_bayes(scores, grade, gender)
 
-            # 预测系别
-            probs = predict_programme_with_bayes(scores, grade, gender)
-            if not probs:
-                continue
+    if not probs:
+        # 如果预测失败，使用最常见的系别作为默认预测
+        predictions.append(y_test.mode()[0])
+        prob_dict = {prog: 0.0 for prog in set(y_test)}
+        probabilities.append(prob_dict)
+    else:
+        # 获取概率最大的系别作为预测结果
+        predicted = max(probs, key=probs.get)
+        predictions.append(predicted)
+        probabilities.append(probs)
 
-            predicted = max(probs, key=probs.get)
-            is_correct = predicted == actual_programme
+# 评估模型性能
+print("\n测试集混淆矩阵:")
+print(confusion_matrix(y_test, predictions))
+print("\n测试集分类报告:")
+print(classification_report(y_test, predictions))
 
-            # 保存结果
-            results['actual'].append(actual_programme)
-            results['predicted'].append(predicted)
-            results['correct'].append(is_correct)
-
-            correct_count += is_correct
-            total_count += 1
-
-        # 计算该年级的准确率
-        grade_accuracy = correct_count / total_count if total_count > 0 else 0
-        print(f"年级 {grade} 预测准确率: {grade_accuracy:.4f} ({correct_count}/{total_count})")
-
-    # 计算总体准确率
-    overall_accuracy = sum(results['correct']) / len(results['correct']) if results['correct'] else 0
-    print(f"\n总体准确率: {overall_accuracy:.4f} ({sum(results['correct'])}/{len(results['correct'])})")
-
-    return results
-
-
-# 简单调用示例
-if __name__ == "__main__":
-    # 训练模型
-    # 注意：grade_models变量已经在上面的代码中填充了训练好的模型
-
-    # 在测试集上验证
-    validate_on_test_set("./test_data.csv")
-
-    # 预测单个学生示例
-    test_student = {'scores': [8, 6, 14, 10, 3], 'grade': 2, 'gender': 2}
-    prediction = predict_programme_with_bayes(
-        test_student['scores'],
-        test_student['grade'],
-        test_student['gender']
-    )
-
-    if prediction:
-        predicted_programme = max(prediction, key=prediction.get)
-        print(f"预测系别: {predicted_programme}")
-        print(f"各系别概率: {prediction}")
+# 计算总体准确率
+accuracy = accuracy_score(y_test, predictions)
+print(f"测试集准确率: {accuracy:.4f}")
