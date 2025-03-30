@@ -212,7 +212,7 @@ def hybrid_predict(scores, grade, gender, models=None):
     for model_type in predictions.keys():
         if 'C' in predictions[model_type]['probabilities']:
             c_prob = predictions[model_type]['probabilities']['C']
-            if c_prob > 0.4:  # 如果某个模型对C类预测概率较高
+            if c_prob > 0.4:  # 如果PCA模型对C类预测概率较高
                 predictions_contain_c = True
 
     if predictions_contain_c:
