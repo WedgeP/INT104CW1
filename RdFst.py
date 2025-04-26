@@ -232,7 +232,7 @@ else:
     best_model.fit(X_train_best)
 
 # 4. 处理新的测试集 student_data.csv
-df_test = pd.read_csv('./student_data.csv')
+df_test = pd.read_csv('./test_data.csv')
 
 # 如果有Programme列且是数字，映射一下
 mapping = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
