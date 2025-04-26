@@ -1,79 +1,172 @@
-import numpy as np
+import platform
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-import itertools
+import numpy as np
+import warnings
 
-esp = 0.0000001
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, Normalizer
+from sklearn.decomposition import PCA, FastICA
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
-# 自动生成特征：比值、乘积、差值、和、平方
-def generate_interaction_features(X):
-    new_features = pd.DataFrame()
-
-    # 生成比值、乘积、差值、和等特征
-    for col1, col2 in itertools.combinations(X.columns, 2):
-        new_features[f'{col1}_div_{col2}'] = X[col1] / (X[col2] + esp)  # 比值
-        # new_features[f'{col1}_mul_{col2}'] = X[col1] * X[col2]  # 乘积
-        new_features[f'{col1}_minus_{col2}'] = X[col1] - X[col2]  # 差值
-        new_features[f'{col1}_plus_{col2}'] = X[col1] + X[col2]  # 和
-
-    # 生成每个特征的平方
-    for col in X.columns:
-        new_features[f'{col}_squared'] = X[col] ** 2  # 平方
-
-    return new_features
-
-
-# 自动生成统计特征
-def generate_statistical_features(X):
-    stats_features = pd.DataFrame()
-    stats_features['mean'] = X.mean(axis=1)  # 平均值
-    stats_features['std'] = X.std(axis=1)  # 标准差
-    stats_features['max'] = X.max(axis=1)  # 最大值
-    stats_features['min'] = X.min(axis=1)  # 最小值
-    return stats_features
+# 设置随机种子
+np.random.seed(42)
 
 # 读取数据
-df = pd.read_csv("./student_data.csv")
+df = pd.read_csv('./student_data.csv')
 
-# 分离特征和目标变量
-X = df.drop(columns=["Programme"])
+# 处理 Programme 字段
+mapping = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
+if df['Programme'].dtype == 'int64' or df['Programme'].iloc[0] in [1, 2, 3, 4]:
+    df['Programme'] = df['Programme'].map(mapping)
 
-# 生成新的特征
-interaction_features = generate_interaction_features(X)
-statistical_features = generate_statistical_features(X)
+# 特征工程
+def process_data(df, mode='train', preprocessors=None):
+    if 'Index' in df.columns:
+        df = df.drop('Index', axis=1)
+    numeric_df = df.select_dtypes(include=['float64', 'int64'])
+    feature_sets = {}
 
-# 合并原始特征和新生成的特征
-X_combined = pd.concat([X, interaction_features, statistical_features], axis=1)
-poly = PolynomialFeatures(degree=4, interaction_only=True, include_bias=False)
-X_combined = poly.fit_transform(X_combined)
-# 标准化所有特征
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_combined)
+    if mode == 'train':
+        preprocessors = {'scalers': {}, 'columns': {}}
 
-# 使用PCA降维到2D
-pca = PCA(n_components=2)
+    if mode == 'train':
+        exam_cols = [col for col in numeric_df.columns if 'Q' in col]
+        if not exam_cols:
+            exam_cols = numeric_df.columns[-5:].tolist()
+        preprocessors['columns']['考试分数'] = exam_cols
+    else:
+        exam_cols = preprocessors['columns']['考试分数']
+    for col in exam_cols:
+        if col not in numeric_df.columns:
+            numeric_df[col] = 0
+    feature_sets['考试分数'] = numeric_df[exam_cols].values
 
-# 对标准化数据进行PCA降维
-X_pca = pca.fit_transform(X_scaled)
+    basic_patterns = ['性别', 'Gender', 'sex', 'Total', '总分', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']
+    if mode == 'train':
+        basic_cols = []
+        for pat in basic_patterns:
+            basic_cols += [col for col in numeric_df.columns if pat.lower() in col.lower()]
+        basic_cols = list(dict.fromkeys(basic_cols))
+        if not basic_cols:
+            basic_cols = numeric_df.columns[:2].tolist()
+        preprocessors['columns']['去除年级'] = basic_cols
+    else:
+        basic_cols = preprocessors['columns']['去除年级']
+    for col in basic_cols:
+        if col not in numeric_df.columns:
+            numeric_df[col] = 0
+    feature_sets['去除年级'] = numeric_df[basic_cols].values
 
-# 将PCA降维结果转为DataFrame便于操作
-df_pca = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+    if mode == 'train':
+        programme_cols = [col for col in numeric_df.columns if 'programme' in col.lower() or 'program' in col.lower()]
+        all_cols = [col for col in numeric_df.columns if col not in programme_cols]
+        preprocessors['columns']['全部特征'] = all_cols
+    else:
+        all_cols = preprocessors['columns']['全部特征']
+    for col in all_cols:
+        if col not in numeric_df.columns:
+            numeric_df[col] = 0
+    feature_sets['全部特征'] = numeric_df[all_cols].values
 
-# 将原始的'Programme'列添加到降维结果中
-df_pca['Programme'] = df['Programme']
+    for name, data in feature_sets.items():
+        if mode == 'train':
+            scaler = StandardScaler()
+            feature_sets[name] = scaler.fit_transform(data)
+            preprocessors['scalers'][name] = scaler
+        else:
+            feature_sets[name] = preprocessors['scalers'][name].transform(data)
 
-# 可视化：根据'programme'列的值为数据点上色
-plt.figure(figsize=(10, 8))
-sns.scatterplot(x='PC1', y='PC2', hue='Programme', data=df_pca, palette='Set1', s=100, marker='o')
+    if mode == 'train':
+        return feature_sets, preprocessors
+    else:
+        return feature_sets
 
-plt.title('PCA - Data Distribution after Different Operations')
-plt.xlabel('Principal Component 1')
-plt.ylabel('Principal Component 2')
-plt.legend(title='Programme')
-plt.show()
+feature_sets, preprocessors = process_data(df, mode='train')
 
-# 输出PCA方差解释比例
-print("Explained variance ratio:", pca.explained_variance_ratio_)
+# 特征转换
+transformed_sets = {}
+for name, X in feature_sets.items():
+    minmax = MinMaxScaler().fit_transform(X)
+    transformed_sets['归一化_' + name] = minmax
+
+    standard = StandardScaler().fit_transform(X)
+    transformed_sets['标准化_' + name] = standard
+
+    normalized = Normalizer().fit_transform(X)
+    transformed_sets['正则缩放_' + name] = normalized
+
+# 降维处理
+final_sets = {}
+for name, X_scaled in transformed_sets.items():
+    pca = PCA(n_components=min(X_scaled.shape[1], 10))
+    final_sets['PCA_' + name] = pca.fit_transform(X_scaled)
+
+    ica = FastICA(n_components=min(X_scaled.shape[1], 10), random_state=42)
+    final_sets['ICA_' + name] = ica.fit_transform(X_scaled)
+
+    tsne = TSNE(n_components=2, random_state=42, init='random', learning_rate='auto')
+    final_sets['TSNE_' + name] = tsne.fit_transform(X_scaled)
+
+# 聚类评估
+def evaluate_clustering(X, labels):
+    try:
+        silhouette = silhouette_score(X, labels)
+    except:
+        silhouette = -1
+    try:
+        db_score = davies_bouldin_score(X, labels)
+    except:
+        db_score = float('inf')
+    try:
+        ch_score = calinski_harabasz_score(X, labels)
+    except:
+        ch_score = -1
+    return silhouette, db_score, ch_score
+
+def run_kmeans(X, n_clusters=[4]):
+    results = []
+    for n in n_clusters:
+        model = KMeans(n_clusters=n, init='k-means++', random_state=42)
+        labels = model.fit_predict(X)
+        silhouette, db, ch = evaluate_clustering(X, labels)
+        results.append({'method': 'kmeans', 'n_clusters': n, 'silhouette': silhouette, 'db': db, 'ch': ch})
+    return results
+
+def run_gmm(X, n_components=[4]):
+    results = []
+    for n in n_components:
+        model = GaussianMixture(n_components=n, covariance_type='full', random_state=42)
+        labels = model.fit_predict(X)
+        silhouette, db, ch = evaluate_clustering(X, labels)
+        results.append({'method': 'gmm', 'n_components': n, 'silhouette': silhouette, 'db': db, 'ch': ch})
+    return results
+
+def run_hierarchical(X, n_clusters=[4]):
+    results = []
+    for n in n_clusters:
+        model = AgglomerativeClustering(n_clusters=n, linkage='ward', metric='euclidean')
+        labels = model.fit_predict(X)
+        silhouette, db, ch = evaluate_clustering(X, labels)
+        results.append({'method': 'hierarchical', 'n_clusters': n, 'silhouette': silhouette, 'db': db, 'ch': ch})
+    return results
+
+# 运行所有实验
+all_results = {}
+for feature_name, X in final_sets.items():
+    kmeans_res = run_kmeans(X)
+    gmm_res = run_gmm(X)
+    hc_res = run_hierarchical(X)
+    all_results[feature_name] = kmeans_res + gmm_res + hc_res
+
+# 提取最佳结果
+best_results = {}
+for feature_name, results in all_results.items():
+    best = max(results, key=lambda x: x['silhouette'])
+    best_results[feature_name] = best
+
+# 结果表格
+import pandas as pd
+results_table = pd.DataFrame.from_dict(best_results, orient='index')
+print(results_table)
