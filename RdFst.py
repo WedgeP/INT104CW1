@@ -166,7 +166,109 @@ for feature_name, results in all_results.items():
     best = max(results, key=lambda x: x['silhouette'])
     best_results[feature_name] = best
 
-# 结果表格
-import pandas as pd
-results_table = pd.DataFrame.from_dict(best_results, orient='index')
-print(results_table)
+from evaluate import evaluate_clustering
+
+# 1. 定义处理函数（用之前的preprocessors）
+def process_test_data(df_test, preprocessors):
+    if 'Index' in df_test.columns:
+        df_test = df_test.drop('Index', axis=1)
+    numeric_df = df_test.select_dtypes(include=['float64', 'int64'])
+    feature_sets = {}
+
+    exam_cols = preprocessors['columns']['考试分数']
+    for col in exam_cols:
+        if col not in numeric_df.columns:
+            numeric_df[col] = 0
+    feature_sets['考试分数'] = numeric_df[exam_cols].values
+
+    basic_cols = preprocessors['columns']['去除年级']
+    for col in basic_cols:
+        if col not in numeric_df.columns:
+            numeric_df[col] = 0
+    feature_sets['去除年级'] = numeric_df[basic_cols].values
+
+    all_cols = preprocessors['columns']['全部特征']
+    for col in all_cols:
+        if col not in numeric_df.columns:
+            numeric_df[col] = 0
+    feature_sets['全部特征'] = numeric_df[all_cols].values
+
+    for name, data in feature_sets.items():
+        feature_sets[name] = preprocessors['scalers'][name].transform(data)
+
+    return feature_sets
+
+# 2. 找到训练时最好的特征+聚类方法
+# 假设你已经有了 best_results 这个字典
+# 比如：
+# best_results = {'PCA_考试分数': {'method': 'kmeans', 'n_clusters': 4, 'silhouette': 0.4, ...}, ...}
+
+# 找到 silhouette score 最高的那一行
+best_feature_name, best_model_info = max(best_results.items(), key=lambda x: x[1]['silhouette'])
+
+print(f"✅ 选中的最佳特征处理方式: {best_feature_name}")
+print(f"✅ 选中的最佳聚类方法: {best_model_info}")
+
+# 提取模型参数
+method = best_model_info['method']
+n_clusters = best_model_info.get('n_clusters') or best_model_info.get('n_components')
+
+# 3. 重新训练最佳模型
+X_train_best = final_sets[best_feature_name]
+
+if method == 'kmeans':
+    best_model = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42)
+elif method == 'gmm':
+    best_model = GaussianMixture(n_components=n_clusters, covariance_type='full', random_state=42)
+elif method == 'hierarchical':
+    best_model = AgglomerativeClustering(n_clusters=n_clusters, linkage='ward', metric='euclidean')
+else:
+    raise ValueError("不支持的聚类方法！")
+
+# 注意：AgglomerativeClustering是没有.fit_predict之外的predict，需要特殊处理
+if method == 'hierarchical':
+    best_model.fit(X_train_best)
+else:
+    best_model.fit(X_train_best)
+
+# 4. 处理新的测试集 student_data.csv
+df_test = pd.read_csv('./student_data.csv')
+
+# 如果有Programme列且是数字，映射一下
+mapping = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
+if 'Programme' in df_test.columns and (df_test['Programme'].dtype == 'int64' or df_test['Programme'].iloc[0] in [1,2,3,4]):
+    df_test['Programme'] = df_test['Programme'].map(mapping)
+
+# 处理特征
+test_feature_sets = process_test_data(df_test, preprocessors)
+
+# 找到原始特征
+base_name = best_feature_name.split('_')[-1]  # 比如PCA_考试分数 -> 考试分数
+X_test_base = test_feature_sets[base_name]
+
+# 按特征处理（比如 PCA）
+if best_feature_name.startswith('PCA'):
+    pca = PCA(n_components=min(X_test_base.shape[1], 10))
+    pca.fit(X_train_best)  # 用训练集来fit PCA
+    X_test_final = pca.transform(X_test_base)
+elif best_feature_name.startswith('ICA'):
+    ica = FastICA(n_components=min(X_test_base.shape[1], 10), random_state=42)
+    ica.fit(X_train_best)
+    X_test_final = ica.transform(X_test_base)
+elif best_feature_name.startswith('TSNE'):
+    tsne = TSNE(n_components=2, random_state=42, init='random', learning_rate='auto')
+    tsne.fit(X_train_best)
+    X_test_final = tsne.fit_transform(X_test_base)  # tsne没法transform，只能重新fit
+else:
+    X_test_final = X_test_base
+
+# 5. 生成预测labels
+if method == 'hierarchical':
+    predicted_labels = best_model.fit_predict(X_test_final)
+else:
+    predicted_labels = best_model.predict(X_test_final)
+
+# 6. 保存结果
+evaluate_clustering(X_test_final, predicted_labels, output_file='predicted_labels.csv')
+
+print("🎉 测试集的预测结果已经保存到 predicted_labels.csv")
