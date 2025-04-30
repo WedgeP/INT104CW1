@@ -103,7 +103,12 @@ for name, X_scaled in transformed_sets.items():
     pca = PCA(n_components=min(X_scaled.shape[1], 10))
     final_sets['PCA_' + name] = pca.fit_transform(X_scaled)
 
-    ica = FastICA(n_components=min(X_scaled.shape[1], 10), random_state=42)
+    ica = FastICA(
+        n_components=min(X_scaled.shape[1], 10),
+        random_state=42,
+        max_iter=500,
+        tol=1e-3
+    )
     final_sets['ICA_' + name] = ica.fit_transform(X_scaled)
 
     tsne = TSNE(n_components=2, random_state=42, init='random', learning_rate='auto')
@@ -127,8 +132,9 @@ def evaluate_clustering(X, labels):
 
 def run_kmeans(X, n_clusters=[4]):
     results = []
-    for n in n_clusters:
-        model = KMeans(n_clusters=n, init='k-means++', random_state=42)
+    n=n_clusters[0]
+    for sinit in ['k-means++', 'random']:
+        model = KMeans(n_clusters=n, init=sinit, random_state=42)
         labels = model.fit_predict(X)
         silhouette, db, ch = evaluate_clustering(X, labels)
         results.append({'method': 'kmeans', 'n_clusters': n, 'silhouette': silhouette, 'db': db, 'ch': ch})
@@ -136,8 +142,9 @@ def run_kmeans(X, n_clusters=[4]):
 
 def run_gmm(X, n_components=[4]):
     results = []
-    for n in n_components:
-        model = GaussianMixture(n_components=n, covariance_type='full', random_state=42)
+    n=n_components[0]
+    for scov in ['full', 'tied', 'diag', 'spherical']:
+        model = GaussianMixture(n_components=n, covariance_type=scov, random_state=42)
         labels = model.fit_predict(X)
         silhouette, db, ch = evaluate_clustering(X, labels)
         results.append({'method': 'gmm', 'n_components': n, 'silhouette': silhouette, 'db': db, 'ch': ch})
@@ -252,7 +259,12 @@ if best_feature_name.startswith('PCA'):
     pca.fit(X_train_best)  # 用训练集来fit PCA
     X_test_final = pca.transform(X_test_base)
 elif best_feature_name.startswith('ICA'):
-    ica = FastICA(n_components=min(X_test_base.shape[1], 10), random_state=42)
+    ica = FastICA(
+        n_components=min(X_scaled.shape[1], 10),
+        random_state=42,
+        max_iter=500,
+        tol=1e-3
+    )
     ica.fit(X_train_best)
     X_test_final = ica.transform(X_test_base)
 elif best_feature_name.startswith('TSNE'):
